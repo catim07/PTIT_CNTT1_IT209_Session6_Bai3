@@ -1,54 +1,68 @@
-# Bài 3: Trích xuất Commit Linh hoạt với Git Cherry-Pick
+# Bài 3: Quản lý Quy trình và Phân tích Hiệu năng Hệ thống
 
 ## Mục tiêu
-- Hiểu và áp dụng lệnh `git cherry-pick` để trích xuất một hoặc nhiều commit cụ thể từ nhánh này sang nhánh khác.
-- Tránh việc phải merge toàn bộ nhánh khi chỉ cần một phần bản sửa lỗi hoặc tính năng nhỏ.
+- Phân tích tiến trình hệ thống, phát hiện dịch vụ chiếm dụng tài nguyên CPU/RAM bất thường bằng `top` và `ps`.
+- Xử lý dừng tiến trình bị treo (`kill` / `pkill`) và cấu hình dịch vụ khởi động cùng hệ thống.
 
 ---
 
-## 1. Bối cảnh & Các bước thực hiện
+## 1. Giả lập Tiến trình Ngốn Tài nguyên (High-CPU / High-Memory Process)
 
-### Bước 1: Giả lập nhánh phát triển `feature/experimental`
-Tạo và thực hiện 3 commit trên nhánh `feature/experimental`:
-1. Commit 1: `echo "exp 1" > exp1.txt` -> Commit: `feat: experimental feature 1`
-2. Commit 2: `echo "bug fix critical" > fix.js` -> Commit: `fix: critical bug fix in core module` (Mã commit: `c7a8b9c`)
-3. Commit 3: `echo "exp 2" > exp2.txt` -> Commit: `feat: experimental feature 2`
+### Chạy tiến trình vòng lặp vô tận chạy ngầm:
+```bash
+python3 -c "while True: pass" &
+```
+*Kết quả:* Trả về Tiến trình PID, ví dụ: `[1] 14205`.
 
-Lịch sử trên `feature/experimental`:
+---
+
+## 2. Truy vết Tiến trình bằng `ps` và `top`
+
+### Lệnh `ps aux | grep python3`:
+```bash
+$ ps aux | grep python3
+user1    14205 98.5  0.4  28540  9120 pts/0    R    10:45   0:15 python3 -c while True: pass
+```
+
+### Màn hình theo dõi tài nguyên `top`:
 ```text
-c7a8b9c fix: critical bug fix in core module
-b6a7f8e feat: experimental feature 1
-```
+top - 10:46:10 up 2 days,  4:12,  1 user,  load average: 1.05, 0.60, 0.35
+Tasks: 112 total,   2 running, 110 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 99.1 us,  0.9 sy,  0.0 ni,  0.0 id,  0.0 wa,  0.0 hi,  0.0 si
 
-### Bước 2: Trích xuất bản vá lỗi về nhánh `main` bằng `git cherry-pick`
-Chuyển về nhánh `main`:
-```bash
-git checkout main
-```
-
-Thực hiện cherry-pick duy nhất commit bản vá lỗi `c7a8b9c`:
-```bash
-git cherry-pick c7a8b9c
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+14205 user1     20   0   28540   9120   3412 R  98.5   0.4   0:35.12 python3
 ```
 
 ---
 
-## 2. Kiểm tra Kết quả Lịch sử Git trên `main`
+## 3. Xử lý Dừng Tiến trình (`kill -9`)
 
+Gửi tín hiệu buộc dừng tiến trình PID `14205`:
 ```bash
-git log --oneline
+sudo kill -9 14205
 ```
 
-**Màn hình xuất kết quả `git log`:**
+Xác nhận tiến trình đã ngưng hoạt động:
+```bash
+$ ps aux | grep 14205
+# Không còn tiến trình xuất hiện
+```
+
+---
+
+## 4. Quản lý Dịch vụ Tự động Khởi động cùng Hệ thống (`systemctl`)
+
+### Kích hoạt Nginx tự động khởi động cùng hệ thống:
+```bash
+sudo systemctl enable nginx
+```
+
+**Kết quả màn hình `systemctl status nginx`:**
 ```text
-d9e8f7a (HEAD -> main) fix: critical bug fix in core module
-9f8e7d6 Initial commit on main
+● nginx.service - A high performance web server and a reverse proxy server
+     Loaded: loaded (/lib/systemd/system/nginx.service; enabled; vendor preset: enabled)
+     Active: active (running) since Mon 2026-10-05 08:00:00 UTC; 2 days ago
+   Main PID: 1234 (nginx)
 ```
-
-File `fix.js` đã được tích hợp vào `main` một cách an toàn mà không đưa các thử nghiệm dở dang (`exp1.txt`, `exp2.txt`) vào sản phẩm.
-
----
-
-## 3. Kết luận
-- `git cherry-pick` là công cụ mạnh mẽ giúp bóc tách đúng những thay đổi cần thiết giữa các nhánh độc lập.
-- Giúp giảm thiểu rủi ro khi đưa code lên nhánh sản xuất `main` hoặc `production`.
+*(Trạng thái `enabled` chứng minh Nginx sẽ tự động chạy mỗi khi reboot máy chủ)*
